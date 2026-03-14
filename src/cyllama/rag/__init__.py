@@ -50,6 +50,7 @@ from .embedder import CacheInfo, Embedder, PoolingType
 from .loaders import (
     BaseLoader,
     DirectoryLoader,
+    DoclingLoader,
     JSONLoader,
     JSONLLoader,
     LoaderError,
@@ -97,6 +98,7 @@ __all__ = [
     "JSONLoader",
     "JSONLLoader",
     "DirectoryLoader",
+    "DoclingLoader",
     "PDFLoader",
     "LoaderError",
     "load_document",

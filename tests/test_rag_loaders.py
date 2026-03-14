@@ -12,7 +12,6 @@ from cyllama.rag.loaders import (
     JSONLoader,
     JSONLLoader,
     DirectoryLoader,
-    PDFLoader,
     LoaderError,
     load_document,
     load_directory,
@@ -458,24 +457,6 @@ class TestDirectoryLoaderSymlinks:
 
             texts = [d.text for d in docs]
             assert "External content" in texts
-
-
-class TestPDFLoader:
-    """Test PDFLoader class."""
-
-    @pytest.mark.skip(reason="Test assumes docling is not installed, but it is")
-    def test_missing_docling(self, temp_dir):
-        """Test error when docling is not installed."""
-        file_path = temp_dir / "test.pdf"
-        file_path.write_bytes(b"%PDF-1.4 fake pdf")
-
-        loader = PDFLoader()
-        # This should raise an error about docling not being installed
-        # (unless docling is actually installed in the test environment)
-        try:
-            loader.load(file_path)
-        except LoaderError as e:
-            assert "docling" in str(e).lower()
 
 
 class TestConvenienceFunctions:

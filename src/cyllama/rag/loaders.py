@@ -635,26 +635,34 @@ class DirectoryLoader(BaseLoader):
                 raise LoaderError(f"Failed to load {file_path}: {e}") from e
 
 
-class PDFLoader(BaseLoader):
-    """Load PDF files using docling.
+class DoclingLoader(BaseLoader):
+    """Load documents using docling.
 
+    Supports PDF, DOCX, PPTX, XLSX, HTML, CSV, and image files.
     Requires docling to be installed: `pip install docling`
 
     Example:
-        >>> loader = PDFLoader()
+        >>> loader = DoclingLoader()
         >>> docs = loader.load("document.pdf")
+        >>> docs = loader.load("report.docx")
+        >>> docs = loader.load("slides.pptx")
 
         >>> # With OCR enabled
-        >>> loader = PDFLoader(ocr=True)
+        >>> loader = DoclingLoader(ocr=True)
         >>> docs = loader.load("scanned.pdf")
     """
+
+    SUPPORTED_EXTENSIONS = {
+        ".pdf", ".docx", ".pptx", ".xlsx", ".html", ".htm",
+        ".csv", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp",
+    }
 
     def __init__(
         self,
         ocr: bool = False,
         extract_images: bool = False,
     ):
-        """Initialize PDF loader.
+        """Initialize docling loader.
 
         Args:
             ocr: Whether to use OCR for scanned documents
@@ -672,32 +680,73 @@ class PDFLoader(BaseLoader):
 
                 self._docling = docling
             except ImportError:
-                raise LoaderError("docling is required for PDF loading. Install it with: pip install docling")
+                raise LoaderError(
+                    "docling is required for document loading. "
+                    "Install it with: pip install docling"
+                )
         return self._docling
 
     def load(self, path: str | Path) -> list[Document]:
-        """Load a PDF file.
+        """Load a document file.
 
         Args:
-            path: Path to PDF file
+            path: Path to document file
 
         Returns:
-            List of Documents (one per page or entire document)
+            List of Documents (one per document)
 
         Raises:
             LoaderError: If docling not installed or file cannot be parsed
         """
         path = self._validate_path(path)
+        suffix = path.suffix.lower()
+
+        if suffix not in self.SUPPORTED_EXTENSIONS:
+            raise LoaderError(
+                f"Unsupported file type for DoclingLoader: {suffix}. "
+                f"Supported: {', '.join(sorted(self.SUPPORTED_EXTENSIONS))}"
+            )
 
         try:
-            docling = self._get_docling()
-            from docling.document_converter import DocumentConverter
+            self._get_docling()
+            from docling.document_converter import DocumentConverter, PdfFormatOption
+            from docling.datamodel.base_models import InputFormat
+            from docling.datamodel.pipeline_options import PdfPipelineOptions
 
-            converter = DocumentConverter()
+            image_extensions = {".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp"}
+
+            format_options = {}
+            if self.ocr:
+                pipeline_options = PdfPipelineOptions()
+                pipeline_options.do_ocr = True
+                if suffix == ".pdf":
+                    format_options[InputFormat.PDF] = PdfFormatOption(
+                        pipeline_options=pipeline_options
+                    )
+                elif suffix in image_extensions:
+                    from docling.document_converter import ImageFormatOption
+                    format_options[InputFormat.IMAGE] = ImageFormatOption(
+                        pipeline_options=pipeline_options
+                    )
+
+            converter = DocumentConverter(format_options=format_options)
             result = converter.convert(str(path))
 
             # Get the markdown export of the document
             text = result.document.export_to_markdown()
+
+            # Determine filetype from extension
+            filetype_map = {
+                ".pdf": "pdf",
+                ".docx": "docx",
+                ".pptx": "pptx",
+                ".xlsx": "xlsx",
+                ".html": "html", ".htm": "html",
+                ".csv": "csv",
+                ".png": "image", ".jpg": "image", ".jpeg": "image",
+                ".tiff": "image", ".tif": "image", ".bmp": "image",
+            }
+            filetype = filetype_map.get(suffix, suffix.lstrip("."))
 
             return [
                 Document(
@@ -705,16 +754,25 @@ class PDFLoader(BaseLoader):
                     metadata={
                         "source": str(path),
                         "filename": path.name,
-                        "filetype": "pdf",
+                        "filetype": filetype,
                     },
                     id=str(path),
                 )
             ]
 
         except ImportError:
-            raise LoaderError("docling is required for PDF loading. Install it with: pip install docling")
+            raise LoaderError(
+                "docling is required for document loading. "
+                "Install it with: pip install docling"
+            )
+        except LoaderError:
+            raise
         except Exception as e:
-            raise LoaderError(f"Failed to parse PDF {path}: {e}") from e
+            raise LoaderError(f"Failed to parse {path}: {e}") from e
+
+
+# Backward-compatible alias
+PDFLoader = DoclingLoader
 
 
 def load_document(path: str | Path, **kwargs) -> list[Document]:
@@ -741,7 +799,19 @@ def load_document(path: str | Path, **kwargs) -> list[Document]:
         ".markdown": MarkdownLoader,
         ".json": JSONLoader,
         ".jsonl": JSONLLoader,
-        ".pdf": PDFLoader,
+        ".pdf": DoclingLoader,
+        ".docx": DoclingLoader,
+        ".pptx": DoclingLoader,
+        ".xlsx": DoclingLoader,
+        ".html": DoclingLoader,
+        ".htm": DoclingLoader,
+        ".csv": DoclingLoader,
+        ".png": DoclingLoader,
+        ".jpg": DoclingLoader,
+        ".jpeg": DoclingLoader,
+        ".tiff": DoclingLoader,
+        ".tif": DoclingLoader,
+        ".bmp": DoclingLoader,
     }
 
     loader_class = loaders.get(suffix)
