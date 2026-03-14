@@ -59,6 +59,7 @@ class RAG:
         chunk_overlap: int = 50,
         db_path: str = ":memory:",
         config: RAGConfig | None = None,
+        store: Any | None = None,
         **kwargs,
     ):
         """Initialize RAG with models.
@@ -73,6 +74,8 @@ class RAG:
             chunk_overlap: Overlap between chunks
             db_path: Path for vector store (":memory:" for in-memory)
             config: RAG configuration (uses defaults if None)
+            store: Custom vector store instance (must implement add/search/clear/close).
+                   If provided, db_path is ignored. Defaults to SQLite VectorStore.
             **kwargs: Additional arguments passed to LLM
         """
         # Import LLM here to avoid circular imports
@@ -83,10 +86,13 @@ class RAG:
 
         # Initialize components
         self.embedder = Embedder(embedding_model)
-        self.store = VectorStore(
-            dimension=self.embedder.dimension,
-            db_path=db_path,
-        )
+        if store is not None:
+            self.store = store
+        else:
+            self.store = VectorStore(
+                dimension=self.embedder.dimension,
+                db_path=db_path,
+            )
         self.splitter = TextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
